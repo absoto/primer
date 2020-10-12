@@ -11,19 +11,70 @@
 //===----------------------------------------------------------------------===//
 
 #include "buffer/lru_replacer.h"
+#include "common/logger.h"
 
 namespace bustub {
 
-LRUReplacer::LRUReplacer(size_t num_pages) {}
+LRUReplacer::LRUReplacer(size_t num_pages) {
+  size = 0;
+  capacity = num_pages;
+  LRUQueue = QueueLinkedList();
+}
 
-LRUReplacer::~LRUReplacer() = default;
+LRUReplacer::~LRUReplacer() {
+  while (!LRUQueue.isEmpty()) {
+    LRUQueue.pop();
+    size--;
+  }
+}
 
-bool LRUReplacer::Victim(frame_id_t *frame_id) { return false; }
+bool LRUReplacer::Victim(frame_id_t *frame_id) {
+  mtx.lock();
 
-void LRUReplacer::Pin(frame_id_t frame_id) {}
+  if (LRUQueue.isEmpty()) {
+    mtx.unlock();
+    return false;
+  }
 
-void LRUReplacer::Unpin(frame_id_t frame_id) {}
+  *frame_id = LRUQueue.pop();
+  size--;
 
-size_t LRUReplacer::Size() { return 0; }
+  mtx.unlock();
+  return true;
+}
 
+void LRUReplacer::Pin(frame_id_t frame_id) {
+  mtx.lock();
+
+  if (!LRUQueue.contains(frame_id)) {
+    mtx.unlock();
+    return;
+  }
+
+  LRUQueue.remove(frame_id);
+  size--;
+
+  mtx.unlock();
+}
+
+void LRUReplacer::Unpin(frame_id_t frame_id) {
+  mtx.lock();
+
+  if (LRUQueue.contains(frame_id)) {
+    mtx.unlock();
+    return;
+  }
+
+  if (size == capacity) {
+    LRUQueue.pop();
+    size--;
+  }
+
+  LRUQueue.add(frame_id);
+  size++;
+
+  mtx.unlock();
+}
+
+size_t LRUReplacer::Size() { return size; }
 }  // namespace bustub
