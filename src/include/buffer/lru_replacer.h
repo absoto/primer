@@ -14,8 +14,9 @@
 
 #include <list>
 #include <mutex>  // NOLINT
-#include <vector>
 #include <unordered_map>
+#include <utility>
+#include <vector>
 
 #include "buffer/replacer.h"
 #include "common/config.h"
@@ -29,101 +30,102 @@ struct node {
 };
 
 /* QueueLinkedList implements a queue that with traversal capability */
-class QueueLinkedList {
+struct QueueLinkedList {
  public:
   QueueLinkedList() {
-    head = nullptr;
-    tail = nullptr;
+    head = new node;
+    tail = new node;
+    head->prev = nullptr;
+    head->next = tail;
+    tail->prev = head;
+    tail->next = nullptr;
+    size = 0;
   }
 
-  bool isEmpty() { return head == nullptr; }
+  ~QueueLinkedList() {
+    while (!isEmpty()) {
+      pop();
+    }
+
+    head->next = nullptr;
+    tail->next = nullptr;
+
+    delete head;
+    delete tail;
+  }
+
+  bool isEmpty() { return size == 0; }
 
   void add(frame_id_t frame_id) {
     node *tmp = new node;
     tmp->data = frame_id;
-    tmp->next = nullptr;
-    tmp->prev = nullptr;
 
-    if (head == nullptr) {
-      head = tmp;
-      tail = tmp;
-    } else {
-      tmp->next = head;
-      head->prev = tmp;
-      head = tmp;
-    }
+    tmp->prev = head;
+    tmp->next = head->next;
+    tmp->next->prev = tmp;
+    head->next = tmp;
 
-    map_.insert(std::pair<frame_id_t, node*>(frame_id,tmp));
+    size++;
+
+    std::pair<frame_id_t, node *> elem(frame_id, tmp);
+    map_.insert(elem);
   }
 
   // requires queue is not empty
   frame_id_t pop() {
-    node *tmp = tail;
+    node *tmp = tail->prev;
     frame_id_t frame_id = tmp->data;
 
-    if (head != tail) {
-      tail = tail->prev;
-      tail->next = nullptr;
-    } else {
-      head = nullptr;
-      tail = nullptr;
-    }
+    tmp->prev->next = tail;
+    tail->prev = tmp->prev;
 
-    delete tmp;
+    tmp->prev = nullptr;
+    tmp->next = nullptr;
+
     map_.erase(frame_id);
+    delete tmp;
+
+    size--;
 
     return frame_id;
   }
 
   bool contains(frame_id_t frame_id) {
-    std::unordered_map<frame_id_t, node*>::const_iterator index = map_.find (frame_id);
+    std::unordered_map<frame_id_t, node *>::const_iterator index = map_.find(frame_id);
+    bool result = true;
 
-    if(index == map_.end()) {
-      return false;
+    if (index == map_.end()) {
+      result = false;
     }
 
-    return true;
+    return result;
   }
 
   void remove(frame_id_t frame_id) {
-    std::unordered_map<frame_id_t, node*>::const_iterator index = map_.find (frame_id);
+    std::unordered_map<frame_id_t, node *>::const_iterator index = map_.find(frame_id);
 
-    if(index == map_.end()) {
-      return;
-    } else {
+    if (index != map_.end()) {
       frame_id_t frame_id = index->first;
       node *tmp = index->second;
 
-      if (tmp == tail) {
-        pop();
-        return;
-      }
+      tmp->prev->next = tmp->next;
+      tmp->next->prev = tmp->prev;
 
-      if (tmp->next != nullptr) {
-        tmp->next->prev = tmp->prev;
-      }
+      tmp->prev = nullptr;
+      tmp->next = nullptr;
 
-      if (tmp->prev != nullptr) {
-        tmp->prev->next = tmp->next;
-      }
+      size--;
 
-      if (tmp == head) {
-        head = head->next;
-
-        if (head != nullptr) {
-          head->prev = nullptr;
-        }
-      }
-
-      delete tmp; 
-      map_.erase(frame_id);  
+      map_.erase(frame_id);
+      delete tmp;
     }
   }
 
  private:
   node *head;
   node *tail;
-  std::unordered_map<frame_id_t, node*> map_;
+  size_t size;
+  std::unordered_map<frame_id_t, node *> map_;
 };
 
 /**
@@ -154,8 +156,8 @@ class LRUReplacer : public Replacer {
   // TODO(student): implement me!
   size_t size;
   size_t capacity;
-  QueueLinkedList LRUQueue;
-  mutable std::mutex mtx; 
+  QueueLinkedList *LRUQueue;
+  mutable std::mutex mtx;
 };
 
 }  // namespace bustub

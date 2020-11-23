@@ -18,25 +18,20 @@ namespace bustub {
 LRUReplacer::LRUReplacer(size_t num_pages) {
   size = 0;
   capacity = num_pages;
-  LRUQueue = QueueLinkedList();
+  LRUQueue = new QueueLinkedList();
 }
 
-LRUReplacer::~LRUReplacer() {
-  while (!LRUQueue.isEmpty()) {
-    LRUQueue.pop();
-    size--;
-  }
-}
+LRUReplacer::~LRUReplacer() { delete LRUQueue; }
 
 bool LRUReplacer::Victim(frame_id_t *frame_id) {
   mtx.lock();
 
-  if (LRUQueue.isEmpty()) {
+  if (LRUQueue->isEmpty()) {
     mtx.unlock();
     return false;
   }
 
-  *frame_id = LRUQueue.pop();
+  *frame_id = LRUQueue->pop();
   size--;
 
   mtx.unlock();
@@ -46,12 +41,12 @@ bool LRUReplacer::Victim(frame_id_t *frame_id) {
 void LRUReplacer::Pin(frame_id_t frame_id) {
   mtx.lock();
 
-  if (!LRUQueue.contains(frame_id)) {
+  if (!LRUQueue->contains(frame_id)) {
     mtx.unlock();
     return;
   }
 
-  LRUQueue.remove(frame_id);
+  LRUQueue->remove(frame_id);
   size--;
 
   mtx.unlock();
@@ -60,17 +55,12 @@ void LRUReplacer::Pin(frame_id_t frame_id) {
 void LRUReplacer::Unpin(frame_id_t frame_id) {
   mtx.lock();
 
-  if (LRUQueue.contains(frame_id)) {
+  if (LRUQueue->contains(frame_id)) {
     mtx.unlock();
     return;
   }
 
-  if (size == capacity) {
-    LRUQueue.pop();
-    size--;
-  }
-
-  LRUQueue.add(frame_id);
+  LRUQueue->add(frame_id);
   size++;
 
   mtx.unlock();
